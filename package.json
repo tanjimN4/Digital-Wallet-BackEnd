@@ -13,15 +13,19 @@
   "description": "",
   "dependencies": {
     "bcrypt": "^6.0.0",
+    "bcryptjs": "^3.0.2",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^17.2.1",
     "express": "^5.1.0",
+    "http-status-codes": "^2.3.0",
     "jsonwebtoken": "^9.0.2",
-    "mongoose": "^8.16.5"
+    "mongoose": "^8.16.5",
+    "zod": "^3.22.4"
   },
   "devDependencies": {
     "@eslint/js": "^9.32.0",
+    "@types/bcryptjs": "^2.4.6",
     "@types/dotenv": "^6.1.1",
     "@types/express": "^5.0.3",
     "@types/node": "^24.1.0",

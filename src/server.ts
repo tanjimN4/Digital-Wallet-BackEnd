@@ -1,7 +1,7 @@
 import { Server } from "http";
 import mongoose from "mongoose";
 import app from "./app";
-import { envVars } from "./config/env";
+import { envVars } from "./app/config/env";
 
 let server :Server
 const startServer = async () => {
@@ -19,3 +19,32 @@ const startServer = async () => {
 }
 
 startServer()
+
+process.on("SIGTERM", (ere) => {
+  console.log("sigterm signal received", ere);
+  if (server) {
+    server.close(() => {
+      process.exit(1)
+    })
+  }
+  process.exit(1)
+})
+
+process.on("unhandledRejection", (ere) => {
+  console.log("unhandled rejection", ere);
+  if (server) {
+    server.close(() => {
+      process.exit(1)
+    })
+  }
+  process.exit(1)
+})
+process.on("uncaughtException", (ere) => {
+  console.log("unhandled exception", ere);
+  if (server) {
+    server.close(() => {
+      process.exit(1)
+    })
+  }
+  process.exit(1)
+})
