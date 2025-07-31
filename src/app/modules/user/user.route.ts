@@ -12,7 +12,7 @@ router.post("/register",
     UserControllers.createUser
 )
 router.get("/all-users",
-    checkAuth(Role.ADMIN),
+    checkAuth(Role.ADMIN,Role.SUPER_ADMIN),
      UserControllers.getAllUsers)
 
 export const UserRoutes=router

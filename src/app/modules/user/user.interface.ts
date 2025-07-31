@@ -4,6 +4,7 @@ export enum Role{
     USER="USER",
     ADMIN="ADMIN",
     AGENT="AGENT",
+    SUPER_ADMIN="SUPER_ADMIN"
 }
 
 export interface IAuthProvider{
@@ -32,6 +33,6 @@ export interface IUser{
     isBlocked?: IsBlocked
     role:Role,
     auths:IAuthProvider[],
-    walletId:Types.ObjectId,
+    walletId?:Types.ObjectId,
     agentApprovalStatus?:agentApprovalStatus
 }

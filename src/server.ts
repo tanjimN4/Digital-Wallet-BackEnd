@@ -2,6 +2,7 @@ import { Server } from "http";
 import mongoose from "mongoose";
 import app from "./app";
 import { envVars } from "./app/config/env";
+import { seedSuperAdmin } from "./app/utils/seedSuperAdmin";
 
 let server :Server
 const startServer = async () => {
@@ -17,8 +18,11 @@ const startServer = async () => {
     console.log(error);
   }
 }
+(async()=>{
+await startServer()
+await seedSuperAdmin()
+})()
 
-startServer()
 
 process.on("SIGTERM", (ere) => {
   console.log("sigterm signal received", ere);
