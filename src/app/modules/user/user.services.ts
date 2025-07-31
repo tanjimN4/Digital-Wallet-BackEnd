@@ -27,8 +27,6 @@ const createUser = async (payload: Partial<IUser>) => {
         password: hashedPassword,
         ...rest
     })
-    console.log("New User:", createNewUser);
-    console.log("User ID:", createNewUser._id);
 
     const wallet = await Wallet.create({
         balance: 50,
@@ -40,6 +38,12 @@ const createUser = async (payload: Partial<IUser>) => {
     return createNewUser
 }
 
+const getAllUsers = async () => {
+    const users = await User.find()
+    return users
+}
+
 export const UserServices = {
     createUser,
+    getAllUsers
 }
