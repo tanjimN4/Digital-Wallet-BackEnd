@@ -1,26 +1,46 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { NextFunction, Request, Response } from "express"
 import httpStatus from "http-status-codes"
 import { JwtPayload } from "jsonwebtoken"
+import passport from "passport"
+import { envVars } from "../../config/env"
 import AppError from "../../errorHelpers/AppError"
 import { catchAsync } from "../../utils/catchAsync"
 import { deleteCookie } from "../../utils/deleteCookie"
 import { sendResponse } from "../../utils/sendResponse"
 import { setAuthCookie } from "../../utils/setCookie"
+import { createUserToken } from "../../utils/userTokens"
+import { IUser } from "../user/user.interface"
+import User from "../user/user.model"
+import Wallet from "../wallet/wallet.model"
 import { AuthService } from "./auth.service"
 const credentialsLogin = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-    const logInfo = await AuthService.credentialsLogin(req.body)
+    passport.authenticate('local', async (err:any,user: any,info :any) => {
 
-    setAuthCookie(res, logInfo)
+        if (err) {
+            return next(new AppError(httpStatus.BAD_REQUEST, err.message)   )
+        }
+        if (!user) {
+            return next(new AppError(httpStatus.BAD_REQUEST, info.message)   )
+        }
 
-    sendResponse(res, {
-        statusCode: httpStatus.OK,
-        success: true,
-        message: "User logged in successfully",
-        data: logInfo
-    })
+        const userTokens=createUserToken(user)
+        const {password,...rest}=user.toObject()
+        setAuthCookie(res, userTokens)
+
+        sendResponse(res, {
+            statusCode: httpStatus.OK,
+            success: true,
+            message: 'Users Login successfully',
+            data: {
+                accessToken: userTokens.accessToken,
+                refreshToken: userTokens.refreshToken,
+                user :rest
+            },
+        })
+    })(req, res, next);
 })
-
 const getNewAccessToken = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const refreshToken = req.cookies.refreshToken
     if (!refreshToken) {
@@ -37,7 +57,7 @@ const getNewAccessToken = catchAsync(async (req: Request, res: Response, next: N
     })
 })
 const logout = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-    deleteCookie(res,{
+    deleteCookie(res, {
         accessToken: req.cookies.accessToken,
         refreshToken: req.cookies.refreshToken
     })
@@ -61,10 +81,43 @@ const resetPassword = catchAsync(async (req: Request, res: Response, next: NextF
         data: null,
     })
 })
+const googleCallBackController = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+
+    let redirectTo = req.query.state ? req.query.state as string : ""
+    if (redirectTo.startsWith("/")) {
+        redirectTo = redirectTo.slice(1)
+    }
+    const user = req.user as IUser 
+    console.log(user);
+
+
+    if (!user) {
+        throw new AppError(httpStatus.BAD_REQUEST, 'User not found')
+    }
+
+    if(user){
+        const isWalletExist = await Wallet.findOne({ ownerId: user._id })
+        if (!isWalletExist) {
+            const wallet = await Wallet.create({
+                balance: 50,
+                ownerId: user._id,
+            })
+            user.walletId = wallet._id
+            await User.findByIdAndUpdate(user._id, { walletId: wallet._id });
+        }
+    }
+    
+    const tokenInfo = createUserToken(user)
+
+    setAuthCookie(res, tokenInfo)
+    res.redirect(`${envVars.FRONTEND_URL}/${redirectTo}`)
+})
+
 
 export const AuthControllers = {
     credentialsLogin,
     getNewAccessToken,
     logout,
-    resetPassword
+    resetPassword,
+    googleCallBackController
 }

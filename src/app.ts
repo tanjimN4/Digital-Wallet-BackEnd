@@ -3,10 +3,10 @@ import express, { Request, Response } from "express";
 import expressSession from "express-session";
 import passport from "passport";
 import { envVars } from "./app/config/env";
+import "./app/config/passport";
 import { globalErrorHandler } from "./app/middlewares/globalErrorHandler";
 import notFound from "./app/middlewares/notFound";
 import { router } from "./app/routes";
-
 const app=express()
 
 app.use(expressSession({
