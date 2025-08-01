@@ -11,6 +11,12 @@ router.post("/register",
     validationRequest(createUserZodSchema),
     UserControllers.createUser
 )
+router.patch("/:id",
+    checkAuth(...Object.values(Role)),
+    UserControllers.updateUser
+)
+
+//admin and super admin access
 router.get("/all-users",
     checkAuth(Role.ADMIN,Role.SUPER_ADMIN),
      UserControllers.getAllUsers)

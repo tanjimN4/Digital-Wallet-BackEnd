@@ -7,5 +7,7 @@ export const generateToken = (payload :JwtPayload,secret :string,expiresIn : str
 
 export const verifyToken = (token :string,secret :string)=>{
     const verifiedToken = jwt.verify(token,secret)
+    console.log(verifiedToken);
+    
     return verifiedToken
 }
