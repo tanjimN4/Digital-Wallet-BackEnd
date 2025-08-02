@@ -16,8 +16,6 @@ router.patch("/:id",
     validationRequest(updateUserZodSchema),
     UserControllers.updateUser
 )
-
-
 router.get("/all-users",
     checkAuth(Role.ADMIN,Role.SUPER_ADMIN),
      UserControllers.getAllUsers)

@@ -45,10 +45,6 @@ export const updateUserZodSchema = z.object({
   role: z
     .enum(Object.keys(Role) as [string])
     .optional(),
-  IsBlocked: z
-    .enum(Object.values(IsBlocked) as [string])
-    .optional(),
-
 })
 
 export const blockUserZodSchema = z.object({
