@@ -2,6 +2,8 @@ import bcryptjs from "bcryptjs";
 import httpStatus from "http-status-codes";
 import { JwtPayload } from "jsonwebtoken";
 import { envVars } from "../../config/env";
+import { QueryBuilder } from "../../utils/QueryBuilder";
+import { walletStatus } from "../wallet/wallet.interface";
 import Wallet from "../wallet/wallet.model";
 import AppError from "./../../errorHelpers/AppError";
 import { IAuthProvider, IsBlocked, IUser, Role } from "./user.interface";
@@ -44,15 +46,9 @@ const updateUsers = async (userId: string, payload: Partial<IUser>, decodedToken
     if (!isUserExist) {
         throw new AppError(httpStatus.BAD_REQUEST, "User not found")
     }
-    if (payload.walletId || payload.email || payload.auths) {
+    if (payload.walletId || payload.email || payload.auths || payload.isBlocked || payload.agentApprovalStatus) {
         throw new AppError(httpStatus.FORBIDDEN, "You are not authorized");
     }
-    if ('agentApprovalStatus' in payload) {
-        if (decodedToken.role !== Role.ADMIN && decodedToken.role !== Role.SUPER_ADMIN) {
-            throw new AppError(httpStatus.FORBIDDEN, "Only ADMIN or SUPER_ADMIN can update agent approval status");
-        }
-    }
-
     if (payload.role) {
         if (decodedToken.role === Role.USER || decodedToken.role === Role.AGENT) {
             throw new AppError(httpStatus.FORBIDDEN, "You are not authorized");
@@ -62,7 +58,16 @@ const updateUsers = async (userId: string, payload: Partial<IUser>, decodedToken
             throw new AppError(httpStatus.FORBIDDEN, "You are not authorized");
         }
     }
-    
+    if (decodedToken.role === Role.ADMIN) {
+        if (isUserExist.role === Role.ADMIN && decodedToken.role === Role.ADMIN) {
+            throw new AppError(httpStatus.FORBIDDEN, "admin can not change other admin role")
+        }
+    }
+
+    if (decodedToken.role === Role.SUPER_ADMIN && decodedToken.userId === userId) {
+        throw new AppError(httpStatus.FORBIDDEN, "Super admin role can not change there own role")
+    }
+
     if (payload.isBlocked === IsBlocked.BLOCKED) {
         throw new AppError(httpStatus.FORBIDDEN, "You are not authorized");
     }
@@ -74,15 +79,80 @@ const updateUsers = async (userId: string, payload: Partial<IUser>, decodedToken
 
 }
 
+const blockUser = async (userId: string,decodedToken: JwtPayload) => {
+    try {
+        const isUserExist = await User.findOne({ _id: userId })
 
+        if (!isUserExist) {
+            throw new AppError(httpStatus.BAD_REQUEST, "User not found")
+        }
+        if (isUserExist.isBlocked === IsBlocked.BLOCKED) {
+            throw new AppError(httpStatus.BAD_REQUEST, 'User is not blocked')
+        }
+        if (decodedToken.role === Role.USER || decodedToken.role === Role.AGENT) {
+            throw new AppError(httpStatus.FORBIDDEN, 'You are not authorized')
+        }
+        if (isUserExist.role === Role.ADMIN && decodedToken.role === Role.ADMIN || isUserExist.role === Role.SUPER_ADMIN && decodedToken.role === Role.SUPER_ADMIN) {
+            throw new AppError(httpStatus.FORBIDDEN, `${isUserExist.role} can not block ${isUserExist.role}`)
+        }
+        const updateUser = await User.findOneAndUpdate({ _id: userId },{isBlocked: IsBlocked.BLOCKED}, { new: true, runValidators: true })
+        const updatedWallet = await Wallet.findOneAndUpdate({ ownerId: userId }, { status: walletStatus.BLOCKED }, { new: true, runValidators: true })
 
-const getAllUsers = async () => {
-    const users = await User.find()
-    return users
+        return { updateUser, updatedWallet }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } catch (error: any) {
+        throw new AppError(httpStatus.BAD_REQUEST, error.message)
+    }
+}
+const unBlockUser = async (userId: string, decodedToken: JwtPayload) => {
+    try {
+        const isUserExist = await User.findOne({ _id: userId })
+
+        if (!isUserExist) {
+            throw new AppError(httpStatus.BAD_REQUEST, "User not found")
+        }
+        if (isUserExist.isBlocked === IsBlocked.ACTIVE) {
+            throw new AppError(httpStatus.BAD_REQUEST, 'User is not blocked')
+        }
+        if (decodedToken.role === Role.USER || decodedToken.role === Role.AGENT) {
+            throw new AppError(httpStatus.FORBIDDEN, 'You are not authorized')
+        }
+        if (isUserExist.role === Role.ADMIN && decodedToken.role === Role.ADMIN || isUserExist.role === Role.SUPER_ADMIN && decodedToken.role === Role.SUPER_ADMIN) {
+            throw new AppError(httpStatus.FORBIDDEN, `${isUserExist.role} can not block ${isUserExist.role}`)
+        }
+        const updateUser = await User.findOneAndUpdate({ _id: userId }, {isBlocked: IsBlocked.ACTIVE}, { new: true, runValidators: true })
+        const updatedWallet = await Wallet.findOneAndUpdate({ ownerId: userId }, { status: walletStatus.ACTIVE }, { new: true, runValidators: true })
+
+        return { updateUser, updatedWallet }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } catch (error: any) {
+        throw new AppError(httpStatus.BAD_REQUEST, error.message)
+    }
+}
+
+const getAllUsers = async (query: Record<string, string>) => {
+    const queryBuilder = new QueryBuilder(User.find(), query)
+
+    const users = queryBuilder
+        .filter()
+        .sort()
+        .fields()
+        .paginate()
+
+    const [data, meta] = await Promise.all([
+        users.build(),
+        queryBuilder.getMeta()
+    ])
+    return {
+        data,
+        meta
+    }
 }
 
 export const UserServices = {
     createUser,
     getAllUsers,
-    updateUsers
+    updateUsers,
+    blockUser,
+    unBlockUser
 }

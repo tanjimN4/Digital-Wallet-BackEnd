@@ -28,18 +28,48 @@ const updateUser = catchAsync(async (req: Request, res: Response, next: NextFunc
     })
 })
 
+const blockUser = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const userId = req.params.id
+    const verifiedToken=req.user
+    const user = await UserServices.blockUser(userId, verifiedToken as JwtPayload)
+
+    sendResponse(res, {
+        statusCode: httpStatus.CREATED,
+        success: true,
+        message: "User blocked successfully",
+        data: user
+    })
+})
+const unBlockUser = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const userId = req.params.id
+    const verifiedToken=req.user
+    const user = await UserServices.unBlockUser(userId, verifiedToken as JwtPayload)
+
+    sendResponse(res, {
+        statusCode: httpStatus.CREATED,
+        success: true,
+        message: "User unblocked successfully",
+        data: user
+    })
+})
+
 const getAllUsers = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-    const result = await UserServices.getAllUsers()
+    const query = req.query
+    const result = await UserServices.getAllUsers(query as Record<string, string>)
     sendResponse(res, {
         statusCode: httpStatus.CREATED,
         success: true,
         message: "Users fetched successfully",
-        data: result
+         data: result.data,
+        meta: result.meta,
     })
 })
+
 
 export const UserControllers = {
     createUser,
     getAllUsers,
-    updateUser
+    updateUser,
+    blockUser,
+    unBlockUser
 }

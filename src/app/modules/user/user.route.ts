@@ -3,7 +3,7 @@ import { checkAuth } from "../../middlewares/checkAuth";
 import { validationRequest } from "../../middlewares/validationRequest";
 import { UserControllers } from "./user.controller";
 import { Role } from "./user.interface";
-import { createUserZodSchema } from "./user.validation";
+import { blockUserZodSchema, createUserZodSchema, unBlockUserZodSchema, updateUserZodSchema } from "./user.validation";
 
 const router=Router();
 
@@ -13,12 +13,25 @@ router.post("/register",
 )
 router.patch("/:id",
     checkAuth(...Object.values(Role)),
+    validationRequest(updateUserZodSchema),
     UserControllers.updateUser
 )
 
-//admin and super admin access
+
 router.get("/all-users",
     checkAuth(Role.ADMIN,Role.SUPER_ADMIN),
      UserControllers.getAllUsers)
+
+router.patch("/block/:id",
+    checkAuth(Role.ADMIN,Role.SUPER_ADMIN),
+    validationRequest(blockUserZodSchema),
+    UserControllers.blockUser
+)
+router.patch("/unblock/:id",
+    checkAuth(Role.ADMIN,Role.SUPER_ADMIN),
+    validationRequest(unBlockUserZodSchema),
+    UserControllers.unBlockUser
+)
+
 
 export const UserRoutes=router
