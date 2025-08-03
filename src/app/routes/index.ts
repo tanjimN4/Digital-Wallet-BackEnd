@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { AgentRoutes } from "../modules/agent/agent.router";
 import { AuthRoutes } from "../modules/auth/auth.route";
 import { TransactionRoutes } from "../modules/transaction/transaction.route";
 import { UserRoutes } from "../modules/user/user.route";
@@ -22,6 +23,10 @@ const moduleRoutes=[
     {
         path:"/transaction",
         router:TransactionRoutes
+    },
+    {
+        path:"/agent",
+        router:AgentRoutes
     },
 ]
 

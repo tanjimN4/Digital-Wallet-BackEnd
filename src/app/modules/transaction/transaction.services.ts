@@ -7,41 +7,54 @@ import Wallet from "../wallet/wallet.model";
 import { ITransaction, TransactionStatus, TransactionType } from "./transaction.interface";
 import { Transaction } from "./transaction.model";
 const addMoney = async (payload: Partial<ITransaction>, decodedToken: JwtPayload) => {
+    const session = await Wallet.startSession();
+    session.startTransaction();
+
     try {
         if (payload.amount) {
             if (payload.amount === 0 || payload.amount < 0) {
                 throw new AppError(httpStatus.BAD_REQUEST, "Amount must be greater than 0")
             }
         }
-        const wallet = await Wallet.findOne({ ownerId: decodedToken.userId })
+        const wallet = await Wallet.findOne({ ownerId: decodedToken.userId }).session(session)
         if (!wallet) {
             throw new AppError(httpStatus.BAD_REQUEST, "Wallet not found")
         }
         wallet.balance += payload.amount as number
-        const updatedWallet = await wallet.save()
-        await Transaction.create([{
-            type: TransactionType.DEPOSIT,
-            amount: payload.amount as number,
-            toWallet: updatedWallet._id,
-            initiatedBy: decodedToken.userId,
-            status: TransactionStatus.APPROVED
-        }])
-        return { updatedWallet, transaction: await Transaction.findOne({ type: TransactionType.DEPOSIT }) }
+        const updatedWallet = await wallet.save({ session })
+        const transaction = await Transaction.create(
+            [{
+                type: TransactionType.DEPOSIT,
+                amount: payload.amount,
+                toWallet: updatedWallet._id,
+                initiatedBy: decodedToken.userId,
+                status: TransactionStatus.APPROVED
+            }],
+            { session }
+        );
+        await session.commitTransaction();
+        session.endSession();
+        return { updatedWallet, transaction: transaction[0] }
 
 
     } catch (error: any) {
+        await session.abortTransaction();
+        session.endSession();
         throw new AppError(httpStatus.BAD_REQUEST, error.message)
     }
 }
 
 const withdrawMoney = async (payload: Partial<ITransaction>, decodedToken: JwtPayload) => {
+    const session = await Wallet.startSession();
+    session.startTransaction();
+
     try {
         if (payload.amount) {
             if (payload.amount === 0 || payload.amount < 0) {
                 throw new AppError(httpStatus.BAD_REQUEST, "Amount must be greater than 0")
             }
         }
-        const wallet = await Wallet.findOne({ ownerId: decodedToken.userId })
+        const wallet = await Wallet.findOne({ ownerId: decodedToken.userId }).session(session)
         if (!wallet) {
             throw new AppError(httpStatus.BAD_REQUEST, "Wallet not found")
         }
@@ -52,23 +65,30 @@ const withdrawMoney = async (payload: Partial<ITransaction>, decodedToken: JwtPa
             throw new AppError(httpStatus.BAD_REQUEST, "Insufficient balance")
         }
         wallet.balance -= payload.amount;
-        const updatedWallet = await wallet.save()
+        const updatedWallet = await wallet.save({ session })
         const transaction = await Transaction.create([{
             type: TransactionType.WITHDRAW,
             amount: payload.amount as number,
             toWallet: updatedWallet._id,
             initiatedBy: decodedToken.userId,
             status: TransactionStatus.APPROVED
-        }])
-        return { updatedWallet, transaction}
+        }], { session })
+        await session.commitTransaction();
+        session.endSession();
+        return { updatedWallet, transaction: transaction[0] }
 
     } catch (error: any) {
+        await session.abortTransaction();
+        session.endSession();
         throw new AppError(httpStatus.BAD_REQUEST, error.message)
     }
 }
 const sendMoney = async (payload: Partial<IWallet>, decodedToken: JwtPayload) => {
+    const session = await Wallet.startSession();
+    session.startTransaction();
+
     try {
-        const wallet = await Wallet.findOne({ ownerId: decodedToken.userId })
+        const wallet = await Wallet.findOne({ ownerId: decodedToken.userId }).session(session)
         if (!wallet) {
             throw new AppError(httpStatus.BAD_REQUEST, "Wallet not found")
         }
@@ -78,26 +98,29 @@ const sendMoney = async (payload: Partial<IWallet>, decodedToken: JwtPayload) =>
         if (wallet.balance < payload.balance) {
             throw new AppError(httpStatus.BAD_REQUEST, "Insufficient balance")
         }
-        const reviverId = await Wallet.findOne({ ownerId: payload.ownerId })
-        console.log(reviverId);
-        
-        if(reviverId){
-            wallet.balance -= payload.balance
-            reviverId.balance += payload.balance
-            await wallet.save()
-            await reviverId.save()
-            const transaction = await Transaction.create([{
-                type: TransactionType.SEND_MONEY,
-                amount: payload.balance as number,
-                toWallet: reviverId._id,
-                initiatedBy: decodedToken.userId,
-                status: TransactionStatus.APPROVED
-            }])
-            return { transaction,reviverId }
+        const reviverId = await Wallet.findOne({ ownerId: payload.ownerId }).session(session)
+        if (!reviverId) {
+            throw new AppError(httpStatus.BAD_REQUEST, "Receiver wallet not found");
         }
 
-        
+        wallet.balance -= payload.balance
+        reviverId.balance += payload.balance
+        await wallet.save({ session })
+        await reviverId.save({ session })
+        const transaction = await Transaction.create([{
+            type: TransactionType.SEND_MONEY,
+            amount: payload.balance as number,
+            toWallet: reviverId._id,
+            initiatedBy: decodedToken.userId,
+            status: TransactionStatus.APPROVED
+        }], { session })
+        await session.commitTransaction();
+        session.endSession();
+        return { transaction: transaction[0], senderWallet: wallet, reviverWallet: reviverId }
+
     } catch (error: any) {
+        await session.abortTransaction();
+        session.endSession();
         throw new AppError(httpStatus.BAD_REQUEST, error.message)
     }
 }

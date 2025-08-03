@@ -1,3 +1,4 @@
+
 import bcryptjs from "bcryptjs";
 import httpStatus from "http-status-codes";
 import { JwtPayload } from "jsonwebtoken";
@@ -10,34 +11,51 @@ import { IAuthProvider, IsBlocked, IUser, Role } from "./user.interface";
 import User from "./user.model";
 
 const createUser = async (payload: Partial<IUser>) => {
+
     const { email, password, ...rest } = payload
+    const session = await User.startSession()
+    session.startTransaction()
 
-    const isUserExist = await User.findOne({ email })
+    try {
+        const isUserExist = await User.findOne({ email }).session(session)
 
-    if (isUserExist) {
-        throw new AppError(httpStatus.BAD_REQUEST, "User already exist")
+        if (isUserExist) {
+            throw new AppError(httpStatus.BAD_REQUEST, "User already exist")
+        }
+        const hashedPassword = await bcryptjs.hash(password as string, Number(envVars.BCRYPT_SALT_ROUND))
+
+        const authProvider: IAuthProvider = {
+            provider: "credentials",
+            providerId: email as string
+        }
+        const createNewUser = await User.create([{
+            auths: [authProvider],
+            email,
+            password: hashedPassword,
+            ...rest
+        }], {session})
+
+         const newUser = createNewUser[0]
+            const wallet = await Wallet.create(
+            [{
+                balance: 50,
+                ownerId: newUser._id,
+            }],
+            { session }
+        );
+          newUser.walletId = wallet[0]._id;
+        await newUser.save({ session });
+
+        await session.commitTransaction()
+        session.endSession()
+
+        return {newUser,wallet}
+    } catch (error) {
+        await session.abortTransaction()
+        session.endSession()
+        throw error
     }
-    const hashedPassword = await bcryptjs.hash(password as string, Number(envVars.BCRYPT_SALT_ROUND))
 
-    const authProvider: IAuthProvider = {
-        provider: "credentials",
-        providerId: email as string
-    }
-    const createNewUser = await User.create({
-        auths: [authProvider],
-        email,
-        password: hashedPassword,
-        ...rest
-    })
-
-    const wallet = await Wallet.create({
-        balance: 50,
-        ownerId: createNewUser._id,
-    })
-
-    createNewUser.walletId = wallet._id
-    await createNewUser.save()
-    return createNewUser
 }
 const updateUsers = async (userId: string, payload: Partial<IUser>, decodedToken: JwtPayload) => {
 
@@ -79,9 +97,11 @@ const updateUsers = async (userId: string, payload: Partial<IUser>, decodedToken
 
 }
 
-const blockUser = async (userId: string,decodedToken: JwtPayload) => {
+const blockUser = async (userId: string, decodedToken: JwtPayload) => {
+     const session = await User.startSession();
+    session.startTransaction();
     try {
-        const isUserExist = await User.findOne({ _id: userId })
+        const isUserExist = await User.findOne({ _id: userId }).session(session)
 
         if (!isUserExist) {
             throw new AppError(httpStatus.BAD_REQUEST, "User not found")
@@ -95,18 +115,22 @@ const blockUser = async (userId: string,decodedToken: JwtPayload) => {
         if (isUserExist.role === Role.ADMIN && decodedToken.role === Role.ADMIN || isUserExist.role === Role.SUPER_ADMIN && decodedToken.role === Role.SUPER_ADMIN) {
             throw new AppError(httpStatus.FORBIDDEN, `${isUserExist.role} can not block ${isUserExist.role}`)
         }
-        const updateUser = await User.findOneAndUpdate({ _id: userId },{isBlocked: IsBlocked.BLOCKED}, { new: true, runValidators: true })
-        const updatedWallet = await Wallet.findOneAndUpdate({ ownerId: userId }, { status: walletStatus.BLOCKED }, { new: true, runValidators: true })
-
+        const updateUser = await User.findOneAndUpdate({ _id: userId }, { isBlocked: IsBlocked.BLOCKED }, { new: true, runValidators: true,session })
+        const updatedWallet = await Wallet.findOneAndUpdate({ ownerId: userId }, { status: walletStatus.BLOCKED }, { new: true, runValidators: true,session })
+        await session.commitTransaction();
+        session.endSession();
         return { updateUser, updatedWallet }
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (error: any) {
-        throw new AppError(httpStatus.BAD_REQUEST, error.message)
+    } catch (error) {
+         await session.abortTransaction();
+        session.endSession()
+        throw error
     }
 }
 const unBlockUser = async (userId: string, decodedToken: JwtPayload) => {
+    const session = await User.startSession();
+    session.startTransaction();
     try {
-        const isUserExist = await User.findOne({ _id: userId })
+        const isUserExist = await User.findOne({ _id: userId }).session(session)
 
         if (!isUserExist) {
             throw new AppError(httpStatus.BAD_REQUEST, "User not found")
@@ -120,13 +144,16 @@ const unBlockUser = async (userId: string, decodedToken: JwtPayload) => {
         if (isUserExist.role === Role.ADMIN && decodedToken.role === Role.ADMIN || isUserExist.role === Role.SUPER_ADMIN && decodedToken.role === Role.SUPER_ADMIN) {
             throw new AppError(httpStatus.FORBIDDEN, `${isUserExist.role} can not block ${isUserExist.role}`)
         }
-        const updateUser = await User.findOneAndUpdate({ _id: userId }, {isBlocked: IsBlocked.ACTIVE}, { new: true, runValidators: true })
-        const updatedWallet = await Wallet.findOneAndUpdate({ ownerId: userId }, { status: walletStatus.ACTIVE }, { new: true, runValidators: true })
-
+        const updateUser = await User.findOneAndUpdate({ _id: userId }, { isBlocked: IsBlocked.ACTIVE }, { new: true, runValidators: true ,session})
+        const updatedWallet = await Wallet.findOneAndUpdate({ ownerId: userId }, { status: walletStatus.ACTIVE }, { new: true, runValidators: true,session })
+        await session.commitTransaction();
+        session.endSession()
         return { updateUser, updatedWallet }
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (error: any) {
-        throw new AppError(httpStatus.BAD_REQUEST, error.message)
+        
+    } catch (error) {
+        await session.abortTransaction();
+        session.endSession()
+        throw error
     }
 }
 

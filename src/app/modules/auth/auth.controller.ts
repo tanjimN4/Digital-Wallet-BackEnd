@@ -16,17 +16,17 @@ import User from "../user/user.model"
 import Wallet from "../wallet/wallet.model"
 import { AuthService } from "./auth.service"
 const credentialsLogin = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-    passport.authenticate('local', async (err:any,user: any,info :any) => {
+    passport.authenticate('local', async (err: any, user: any, info: any) => {
 
         if (err) {
-            return next(new AppError(httpStatus.BAD_REQUEST, err.message)   )
+            return next(new AppError(httpStatus.BAD_REQUEST, err.message))
         }
         if (!user) {
-            return next(new AppError(httpStatus.BAD_REQUEST, info.message)   )
+            return next(new AppError(httpStatus.BAD_REQUEST, info.message))
         }
 
-        const userTokens=createUserToken(user)
-        const {password,...rest}=user.toObject()
+        const userTokens = createUserToken(user)
+        const { password, ...rest } = user.toObject()
         setAuthCookie(res, userTokens)
 
         sendResponse(res, {
@@ -36,7 +36,7 @@ const credentialsLogin = catchAsync(async (req: Request, res: Response, next: Ne
             data: {
                 accessToken: userTokens.accessToken,
                 refreshToken: userTokens.refreshToken,
-                user :rest
+                user: rest
             },
         })
     })(req, res, next);
@@ -87,30 +87,38 @@ const googleCallBackController = catchAsync(async (req: Request, res: Response, 
     if (redirectTo.startsWith("/")) {
         redirectTo = redirectTo.slice(1)
     }
-    const user = req.user as IUser 
+    const user = req.user as IUser
     console.log(user);
 
 
     if (!user) {
         throw new AppError(httpStatus.BAD_REQUEST, 'User not found')
     }
-
-    if(user){
-        const isWalletExist = await Wallet.findOne({ ownerId: user._id })
-        if (!isWalletExist) {
-            const wallet = await Wallet.create({
-                balance: 50,
-                ownerId: user._id,
-            })
-            user.walletId = wallet._id
-            await User.findByIdAndUpdate(user._id, { walletId: wallet._id });
+    const session = await User.startSession();
+    session.startTransaction();
+    try {
+        if (user) {
+            const isWalletExist = await Wallet.findOne({ ownerId: user._id }).session(session);
+            if (!isWalletExist) {
+                const wallet = await Wallet.create(
+                    [{ balance: 50, ownerId: user._id }],
+                    { session }
+                )
+                user.walletId = wallet[0]._id
+                await User.findByIdAndUpdate(user._id, { walletId: wallet[0]._id }, { session });
+            }
         }
-    }
-    
-    const tokenInfo = createUserToken(user)
 
-    setAuthCookie(res, tokenInfo)
-    res.redirect(`${envVars.FRONTEND_URL}/${redirectTo}`)
+        const tokenInfo = createUserToken(user)
+
+        setAuthCookie(res, tokenInfo)
+        res.redirect(`${envVars.FRONTEND_URL}/${redirectTo}`)
+    } catch (error) {
+        await session.abortTransaction();
+        session.endSession();
+        throw error;
+    }
+
 })
 
 
