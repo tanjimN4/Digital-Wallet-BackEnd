@@ -1,4 +1,5 @@
-import { TGenericErrorResponse } from "../interfaces/error.types"
+import { TGenericErrorResponse } from "../interface/error.types"
+
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export const handleDuplicateError = (err: any): TGenericErrorResponse => {
