@@ -4,6 +4,7 @@ import httpStatus from "http-status-codes";
 import { JwtPayload } from "jsonwebtoken";
 import { envVars } from "../../config/env";
 import { QueryBuilder } from "../../utils/QueryBuilder";
+import { Transaction } from "../transaction/transaction.model";
 import { walletStatus } from "../wallet/wallet.interface";
 import Wallet from "../wallet/wallet.model";
 import AppError from "./../../errorHelpers/AppError";
@@ -136,6 +137,8 @@ const unBlockUser = async (userId: string, decodedToken: JwtPayload) => {
             throw new AppError(httpStatus.BAD_REQUEST, "User not found")
         }
         if (isUserExist.isBlocked === IsBlocked.ACTIVE) {
+            console.log('kk',isUserExist.isBlocked);
+            
             throw new AppError(httpStatus.BAD_REQUEST, 'User is not blocked')
         }
         if (decodedToken.role === Role.USER || decodedToken.role === Role.AGENT) {
@@ -158,28 +161,93 @@ const unBlockUser = async (userId: string, decodedToken: JwtPayload) => {
 }
 
 const getAllUsers = async (query: Record<string, string>) => {
-    const queryBuilder = new QueryBuilder(User.find(), query)
+    const queryBuilder = new QueryBuilder(User.find(), query);
 
-    const users = queryBuilder
+    const usersQuery = queryBuilder
         .filter()
         .sort()
         .fields()
-        .paginate()
+        .paginate();
 
-    const [data, meta] = await Promise.all([
-        users.build(),
+    const [users, meta] = await Promise.all([
+        usersQuery.build(),
         queryBuilder.getMeta()
-    ])
+    ]);
+
+    // Get all walletIds from users
+    const walletIds = users.map(user => user.walletId);
+    const wallets = await Wallet.find({ _id: { $in: walletIds } }).lean();
+
+    // Get all transactions for these wallets
+    const transactions = await Transaction.find({
+        $or: [
+            { fromWallet: { $in: walletIds } },
+            { toWallet: { $in: walletIds } }
+        ]
+    }).lean();
+
+    // Merge users with wallets + transactions
+    const usersWithWalletAndTransactions = users.map(user => {
+        const userObj = user.toObject ? user.toObject() : user;
+        const wallet = wallets.find(w => w._id.toString() === user.walletId?.toString());
+
+        const userTransactions = transactions.filter(
+            t =>
+                t.fromWallet?.toString() === user.walletId?.toString() ||
+                t.toWallet?.toString() === user.walletId?.toString()
+        );
+
+        return {
+            ...userObj,
+            wallet,
+            transactions: userTransactions
+        };
+    });
+
     return {
-        data,
+        data: usersWithWalletAndTransactions,
         meta
-    }
-}
+    };
+};
+
+const getMe = async (userId: string) => {
+  const user = await User.findById(userId)
+    .select("-password")
+    .lean();
+
+  if (!user) {
+    return {
+      success: false,
+      message: "User not found",
+      data: null,
+    };
+  }
+
+  // fetch wallet using walletId
+  const wallet = user.walletId
+    ? await Wallet.findById(user.walletId).lean()
+    : null;
+
+  // Destructure user to remove walletId if you don’t want it in response
+  const { walletId, ...restUser } = user;
+
+  return {
+    success: true,
+    message: "Your profile Retrieved Successfully",
+    data: {
+      ...restUser,
+      wallet,
+    },
+  };
+};
+
+
 
 export const UserServices = {
     createUser,
     getAllUsers,
     updateUsers,
     blockUser,
-    unBlockUser
+    unBlockUser,
+    getMe
 }
