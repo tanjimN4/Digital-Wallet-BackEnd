@@ -19,6 +19,9 @@ router.patch("/:id",
 router.get("/all-users",
     checkAuth(Role.ADMIN,Role.SUPER_ADMIN),
      UserControllers.getAllUsers)
+router.get("/get-me",
+    checkAuth(...Object.values(Role)),
+     UserControllers.getMe)
 
 router.patch("/block/:id",
     checkAuth(Role.ADMIN,Role.SUPER_ADMIN),
@@ -30,6 +33,7 @@ router.patch("/unblock/:id",
     validationRequest(unBlockUserZodSchema),
     UserControllers.unBlockUser
 )
+
 
 
 export const UserRoutes=router

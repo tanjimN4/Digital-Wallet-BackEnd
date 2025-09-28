@@ -1,4 +1,5 @@
 import cookieParser from "cookie-parser";
+import cors from "cors";
 import express, { Request, Response } from "express";
 import expressSession from "express-session";
 import passport from "passport";
@@ -14,7 +15,10 @@ app.use(expressSession({
   resave: false,
   saveUninitialized: false
 }))
-
+app.use(cors({
+    origin: envVars.FRONTEND_URL,
+    credentials: true
+}))
 app.use(passport.initialize())
 app.use(passport.session())
 
