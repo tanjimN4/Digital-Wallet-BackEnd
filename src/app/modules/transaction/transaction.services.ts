@@ -6,6 +6,7 @@ import User from "../user/user.model";
 import Wallet from "../wallet/wallet.model";
 import { ITransaction, TransactionStatus, TransactionType } from "./transaction.interface";
 import { Transaction } from "./transaction.model";
+import { QueryBuilder } from "../../utils/QueryBuilder";
 const addMoney = async (payload: Partial<ITransaction>, decodedToken: JwtPayload) => {
     const session = await Wallet.startSession();
     session.startTransaction();
@@ -145,10 +146,111 @@ const getMyTransactionHistory = async (decodedToken: JwtPayload) => {
     return transactions
 }
 
-const getAllTransactions = async () => {
-    const transactions = await Transaction.find()
-    return transactions
-}
+const getAllTransactions = async (query: Record<string, string>) => {
+  const page = Number(query.page) || 1;
+  const limit = Number(query.limit) || 10;
+  const skip = (page - 1) * limit;
+
+  const pipeline: any[] = [];
+
+  // Status / Type filter (direct on transaction)
+  const match: Record<string, any> = {};
+  if (query.status) match.status = query.status;
+  if (query.type) match.type = query.type;
+  if (Object.keys(match).length > 0) {
+    pipeline.push({ $match: match });
+  }
+
+  // Lookup wallets
+  pipeline.push(
+    {
+      $lookup: {
+        from: "wallets",
+        localField: "fromWallet",
+        foreignField: "_id",
+        as: "fromWallet",
+      },
+    },
+    { $unwind: { path: "$fromWallet", preserveNullAndEmptyArrays: true } },
+    {
+      $lookup: {
+        from: "wallets",
+        localField: "toWallet",
+        foreignField: "_id",
+        as: "toWallet",
+      },
+    },
+    { $unwind: { path: "$toWallet", preserveNullAndEmptyArrays: true } }
+  );
+
+  // Search filter on ownerId (inside wallets)
+  if (query.search) {
+    pipeline.push({
+      $match: {
+        $or: [
+          { "fromWallet.ownerId": query.search },
+          { "toWallet.ownerId": query.search },
+        ],
+      },
+    });
+  }
+
+  // Sorting, pagination
+  pipeline.push(
+    { $sort: { createdAt: -1 } },
+    { $skip: skip },
+    { $limit: limit }
+  );
+
+  const transactions = await Transaction.aggregate(pipeline);
+
+  // Total count (apply same filters for count)
+  const totalPipeline: any[] = [];
+  if (Object.keys(match).length > 0) totalPipeline.push({ $match: match });
+  if (query.search) {
+    totalPipeline.push(
+      {
+        $lookup: {
+          from: "wallets",
+          localField: "fromWallet",
+          foreignField: "_id",
+          as: "fromWallet",
+        },
+      },
+      { $unwind: { path: "$fromWallet", preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: "wallets",
+          localField: "toWallet",
+          foreignField: "_id",
+          as: "toWallet",
+        },
+      },
+      { $unwind: { path: "$toWallet", preserveNullAndEmptyArrays: true } },
+      {
+        $match: {
+          $or: [
+            { "fromWallet.ownerId": query.search },
+            { "toWallet.ownerId": query.search },
+          ],
+        },
+      }
+    );
+  }
+
+  const totalResult = await Transaction.aggregate([...totalPipeline, { $count: "total" }]);
+  const total = totalResult[0]?.total || 0;
+
+  return {
+    data: transactions,
+    meta: {
+      page,
+      limit,
+      total,
+      totalPage: Math.ceil(total / limit),
+    },
+  };
+};
 
 export const TransactionServices = {
     addMoney,

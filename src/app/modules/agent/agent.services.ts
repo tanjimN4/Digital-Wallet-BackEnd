@@ -28,39 +28,40 @@ const agentRequest = async (decodedToken: JwtPayload) => {
     const updatedUser = await User.findOneAndUpdate({ _id: decodedToken.userId }, { agentApprovalStatus: agentApprovalStatus.PENDING }, { new: true, runValidators: true })
     return updatedUser
 }
-const agentApprovalRejectedStatus = async (payload: Partial<IUser>) => {
-    const user = await User.findOne({ _id: payload._id });
-    if (!user) {
-        throw new AppError(httpStatus.BAD_REQUEST, "User not found");
-    }
-    let updateData;
-    if (payload.agentApprovalStatus === agentApprovalStatus.REJECTED) {
-        updateData = {
-            agentApprovalStatus: agentApprovalStatus.REJECTED,
-            role: Role.USER
-        };
-    } else {
-        updateData = {
-            agentApprovalStatus: agentApprovalStatus.APPROVED,
-            role: Role.AGENT
-        };
-    }
+const agentApprovalRejectedStatus = async (payload: { _id: string; agentApprovalStatus: string }) => {
 
-    const updatedUser = await User.findByIdAndUpdate(
-        payload._id,
-        { $set: updateData },
-        { new: true }  // return the updated document
-    );
+  if (!payload._id) {
+    throw new AppError(httpStatus.BAD_REQUEST, "User ID is required");
+  }
 
-    return updatedUser;
+  const user = await User.findById(payload._id);
+  if (!user) {
+    throw new AppError(httpStatus.BAD_REQUEST, "User not found");
+  }
+
+  const updateData =
+    payload.agentApprovalStatus === agentApprovalStatus.REJECTED
+      ? { agentApprovalStatus: agentApprovalStatus.REJECTED, role: Role.USER }
+      : { agentApprovalStatus: agentApprovalStatus.APPROVED, role: Role.AGENT };
+
+  const updatedUser = await User.findByIdAndUpdate(payload._id, { $set: updateData }, { new: true });
+
+  return updatedUser;
 };
+
 
 // agent send Money to User cash-in
 const cashIn = async (payload: Partial<IWallet>, decodedToken: JwtPayload) => {
     const session = await Wallet.startSession();
     session.startTransaction()
     try {
-        const wallet = await Wallet.findOne({ ownerId: payload.ownerId}).session(session)
+        console.log(payload);
+        
+        const user = await User.findOne({ email: payload.email })
+        if (!user) {
+            throw new AppError(httpStatus.BAD_REQUEST, "User Wallet not found")
+        }
+        const wallet = await Wallet.findOne({ ownerId: user._id }).session(session)
         if (!wallet) {
             throw new AppError(httpStatus.BAD_REQUEST, "Wallet not found")
         }
@@ -79,17 +80,17 @@ const cashIn = async (payload: Partial<IWallet>, decodedToken: JwtPayload) => {
         await agentWallet.save({ session })
         await wallet.save({ session })
         const transaction = await Transaction.create([{
-            type: TransactionType.CASH_IN,     
+            type: TransactionType.CASH_IN,
             amount: payload.balance as number,
             toWallet: wallet._id,
             initiatedBy: decodedToken.userId,
             status: TransactionStatus.APPROVED
         }], { session })
-          await session.commitTransaction();
+        await session.commitTransaction();
         session.endSession();
         return { agentWallet, wallet, transaction: transaction[0] }
     } catch (error: any) {
-         await session.abortTransaction();
+        await session.abortTransaction();
         session.endSession()
         throw new AppError(httpStatus.BAD_REQUEST, error.message)
     }
@@ -97,37 +98,37 @@ const cashIn = async (payload: Partial<IWallet>, decodedToken: JwtPayload) => {
 
 // user send money to agent for cash-out
 const cashOut = async (payload: Partial<IWallet>, decodedToken: JwtPayload) => {
-     const session = await Wallet.startSession();
+    const session = await Wallet.startSession();
     session.startTransaction();
     try {
         const agentWallet = await Wallet.findOne({ ownerId: payload.ownerId }).session(session)
-    if (!agentWallet) {
-        throw new AppError(httpStatus.BAD_REQUEST, "Agent wallet not found")
-    }
-    const userWallet =await Wallet.findOne({ ownerId: decodedToken.userId })
-    if (!userWallet) {
-        throw new AppError(httpStatus.BAD_REQUEST, "User wallet not found")
-    }
-    if (payload.balance === undefined) {
-        throw new AppError(httpStatus.BAD_REQUEST, "Amount is required")
-    }
-    if (userWallet.balance < payload.balance) {
-        throw new AppError(httpStatus.BAD_REQUEST, "Insufficient balance")
-    }
-    userWallet.balance -= payload.balance
-    agentWallet.balance += payload.balance
-    await userWallet.save({ session })
-    await agentWallet.save({ session })
-    const transaction = await Transaction.create([{
-        type: TransactionType.CASH_OUT,
-        amount: payload.balance as number,
-        toWallet: agentWallet._id,
-        initiatedBy: decodedToken.userId,
-        status: TransactionStatus.APPROVED
-    }], { session })
-    await session.commitTransaction();
-    session.endSession();
-    return { userWallet, agentWallet, transaction: transaction[0] }
+        if (!agentWallet) {
+            throw new AppError(httpStatus.BAD_REQUEST, "Agent wallet not found")
+        }
+        const userWallet = await Wallet.findOne({ ownerId: decodedToken.userId })
+        if (!userWallet) {
+            throw new AppError(httpStatus.BAD_REQUEST, "User wallet not found")
+        }
+        if (payload.balance === undefined) {
+            throw new AppError(httpStatus.BAD_REQUEST, "Amount is required")
+        }
+        if (userWallet.balance < payload.balance) {
+            throw new AppError(httpStatus.BAD_REQUEST, "Insufficient balance")
+        }
+        userWallet.balance -= payload.balance
+        agentWallet.balance += payload.balance
+        await userWallet.save({ session })
+        await agentWallet.save({ session })
+        const transaction = await Transaction.create([{
+            type: TransactionType.CASH_OUT,
+            amount: payload.balance as number,
+            toWallet: agentWallet._id,
+            initiatedBy: decodedToken.userId,
+            status: TransactionStatus.APPROVED
+        }], { session })
+        await session.commitTransaction();
+        session.endSession();
+        return { userWallet, agentWallet, transaction: transaction[0] }
     } catch (error: any) {
         await session.abortTransaction();
         session.endSession()
@@ -138,5 +139,5 @@ export const AgentServices = {
     agentRequest,
     agentApprovalRejectedStatus,
     cashIn,
-     cashOut
+    cashOut
 }

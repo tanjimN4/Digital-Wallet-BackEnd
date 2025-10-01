@@ -68,8 +68,7 @@ const logout = catchAsync(async (req: Request, res: Response, next: NextFunction
         data: null,
     })
 })
-const resetPassword = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-
+const resetPassword = catchAsync(async (req: Request, res: Response, next: NextFunction) => {  
     const newPassword = req.body.newPassword
     const oldPassword = req.body.oldPassword
     const decodeToken = req.user

@@ -18,6 +18,8 @@ const agentRequest =catchAsync(async (req: Request, res: Response, next: NextFun
 })
 const agentApprovalRejectedStatus = catchAsync(
   async (req: Request, res: Response, next: NextFunction) => {
+    console.log("body",req.body);
+    
     const result = await AgentServices.agentApprovalRejectedStatus(
       req.body,
     );

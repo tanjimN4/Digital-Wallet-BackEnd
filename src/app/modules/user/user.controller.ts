@@ -83,6 +83,19 @@ const  getAllUsers= catchAsync(async (req: Request, res: Response, next: NextFun
         meta: result.meta,
     });
 });
+const  getEmailRoleUsers= catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const query = req.query;
+    const result = await UserServices.getEmailRoleUsers(query as Record<string, string>);
+
+    sendResponse(res, {
+        statusCode: httpStatus.OK,
+        success: true,
+        message: "Users fetched successfully",
+        data: result.data,
+        meta: result.meta,
+    });
+});
+
 const getMe = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const decodedToken = req.user as JwtPayload
     const result = await UserServices.getMe(decodedToken.userId);
@@ -108,6 +121,6 @@ export const UserControllers = {
     updateUser,
     blockUser,
     unBlockUser,
-    getMe
+    getMe,getEmailRoleUsers
 
 }

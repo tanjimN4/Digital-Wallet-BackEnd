@@ -8,7 +8,7 @@ import { Transaction } from "../transaction/transaction.model";
 import { walletStatus } from "../wallet/wallet.interface";
 import Wallet from "../wallet/wallet.model";
 import AppError from "./../../errorHelpers/AppError";
-import { IAuthProvider, IsBlocked, IUser, Role } from "./user.interface";
+import { agentApprovalStatus, IAuthProvider, IsBlocked, IUser, Role } from "./user.interface";
 import User from "./user.model";
 
 const createUser = async (payload: Partial<IUser>) => {
@@ -209,6 +209,35 @@ const getAllUsers = async (query: Record<string, string>) => {
         meta
     };
 };
+const getEmailRoleUsers = async (query: Record<string, string>) => {
+    const queryBuilder = new QueryBuilder(User.find(), query);
+
+    const usersQuery = queryBuilder
+        .filter()
+        .sort()
+        .fields()
+        .paginate();
+
+    const [users, meta] = await Promise.all([
+        usersQuery.build(),
+        queryBuilder.getMeta()
+    ]);
+
+    // Only pick email and role
+    const simplifiedUsers = users.map(user => {
+        const userObj = user.toObject ? user.toObject() : user;
+        return {
+            email: userObj.email,
+            role: userObj.role,
+            agentApprovalStatus:userObj.agentApprovalStatus
+        };
+    });
+
+    return {
+        data: simplifiedUsers,
+        meta
+    };
+};
 
 const getMe = async (userId: string) => {
   const user = await User.findById(userId)
@@ -249,5 +278,5 @@ export const UserServices = {
     updateUsers,
     blockUser,
     unBlockUser,
-    getMe
+    getMe,getEmailRoleUsers
 }

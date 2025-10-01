@@ -66,16 +66,22 @@ const getMyTransactionHistory=catchAsync(async (req: Request, res: Response, nex
     })
 })
 //admin/super admin
-const getAllTransactions=catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-    const allTransactions = await TransactionServices.getAllTransactions()
+const getAllTransactions = catchAsync(
+  async (req: Request, res: Response, next: NextFunction) => {
+    const query = req.query;
+    const result = await TransactionServices.getAllTransactions(
+      query as Record<string, string>
+    );
 
     sendResponse(res, {
-        statusCode: httpStatus.CREATED,
-        success: true,
-        message: "All transactions",
-        data: allTransactions
-    })
-})
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "All transactions fetched successfully",
+      data: result.data,
+      meta: result.meta,
+    });
+  }
+);
 
 export const TransactionController = {
     addMoney,

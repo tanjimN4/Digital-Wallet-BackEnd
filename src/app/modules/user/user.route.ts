@@ -19,6 +19,8 @@ router.patch("/:id",
 router.get("/all-users",
     checkAuth(Role.ADMIN,Role.SUPER_ADMIN),
      UserControllers.getAllUsers)
+router.get("/getemailrole",
+     UserControllers.getEmailRoleUsers)
 router.get("/get-me",
     checkAuth(...Object.values(Role)),
      UserControllers.getMe)
