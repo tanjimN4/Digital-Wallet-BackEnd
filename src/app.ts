@@ -16,8 +16,7 @@ app.use(expressSession({
   saveUninitialized: false
 }))
 app.use(cors({
-    origin:"https://digital-wallet-front-end.vercel.app",
-
+    origin: envVars.FRONTEND_URL,
     credentials: true
 }))
 app.use(passport.initialize())
